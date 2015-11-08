@@ -43,7 +43,7 @@ public class FlickrLoaderService extends IntentService {
     private static Observable<RawSearch> createSearchObservable(String keyword, int count) {
         return apiSearchService.get(
                 FlickrApi.SEARCH_METHOD,
-                FlickrApi.KEY,
+                Credentials.KEY,
                 keyword,
                 count,
                 "1,2,3,4,5,6,7",
@@ -57,7 +57,7 @@ public class FlickrLoaderService extends IntentService {
     private static Observable<RawInfo> createInfoObservable(String photoId, String secret) {
         return apiInfoService.get(
                 FlickrApi.INFO_METHOD,
-                FlickrApi.KEY,
+                Credentials.KEY,
                 photoId,
                 secret,
                 "json",
