@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">WallpapR</string>
+    <string name="preference_file_key">shared_prefs</string>
+    <string name="swipe_order">Swip to refresh!</string>
+</resources>
