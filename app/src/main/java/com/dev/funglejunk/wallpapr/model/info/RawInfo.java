@@ -21,6 +21,14 @@ public class RawInfo {
                 + photo.secret + "_b.jpg";
     }
 
+    @Override
+    public String toString() {
+        return "RawInfo{" +
+                "photo=" + photo +
+                ", stat='" + stat + '\'' +
+                '}';
+    }
+
     public static class Comments {
 
         @SerializedName("_content")
@@ -191,6 +199,37 @@ public class RawInfo {
         @Expose
         public String media;
 
+        @Override
+        public String toString() {
+            return "Photo{" +
+                    "id='" + id + '\'' +
+                    ", secret='" + secret + '\'' +
+                    ", server='" + server + '\'' +
+                    ", farm=" + farm +
+                    ", dateuploaded='" + dateuploaded + '\'' +
+                    ", isfavorite=" + isfavorite +
+                    ", license=" + license +
+                    ", safetyLevel=" + safetyLevel +
+                    ", rotation=" + rotation +
+                    ", originalsecret='" + originalsecret + '\'' +
+                    ", originalformat='" + originalformat + '\'' +
+                    ", owner=" + owner +
+                    ", title=" + title +
+                    ", description=" + description +
+                    ", visibility=" + visibility +
+                    ", dates=" + dates +
+                    ", views=" + views +
+                    ", editability=" + editability +
+                    ", publiceditability=" + publiceditability +
+                    ", usage=" + usage +
+                    ", comments=" + comments +
+                    ", notes=" + notes +
+                    ", people=" + people +
+                    ", tags=" + tags +
+                    ", urls=" + urls +
+                    ", media='" + media + '\'' +
+                    '}';
+        }
     }
 
     public static class Publiceditability {

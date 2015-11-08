@@ -1,10 +1,12 @@
 package com.dev.funglejunk.wallpapr.fragment;
 
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.os.Bundle;
+import android.support.annotation.Nullable;
+import android.support.design.widget.FloatingActionButton;
 import android.support.v4.app.Fragment;
-import android.support.v4.view.ViewPager;
 import android.support.v4.widget.SwipeRefreshLayout;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -15,10 +17,13 @@ import com.dev.funglejunk.wallpapr.Config;
 import com.dev.funglejunk.wallpapr.MainActivity;
 import com.dev.funglejunk.wallpapr.R;
 import com.dev.funglejunk.wallpapr.flickr.FlickrLoaderService;
+import com.dev.funglejunk.wallpapr.model.info.RawInfo;
 import com.dev.funglejunk.wallpapr.rx.RxServiceCallback;
-import com.dev.funglejunk.wallpapr.util.BitmapStore;
+import com.dev.funglejunk.wallpapr.util.BitmapMemory;
 import com.dev.funglejunk.wallpapr.util.GalleryAdapter;
-import com.dev.funglejunk.wallpapr.util.VerticalParallaxViewPager;
+import com.dev.funglejunk.wallpapr.util.GalleryPagerListener;
+import com.dev.funglejunk.wallpapr.util.InfoMemory;
+import com.dev.funglejunk.wallpapr.util.ui.VerticalParallaxViewPager;
 import com.squareup.picasso.Picasso;
 
 import java.io.IOException;
@@ -26,6 +31,7 @@ import java.util.List;
 
 import butterknife.Bind;
 import butterknife.ButterKnife;
+import butterknife.OnClick;
 import rx.Observable;
 import rx.Subscription;
 import rx.android.schedulers.AndroidSchedulers;
@@ -42,10 +48,19 @@ public class GalleryFragment extends Fragment implements SwipeRefreshLayout.OnRe
     @Bind(R.id.pager)
     VerticalParallaxViewPager pager;
 
+    @Bind(R.id.info_button)
+    FloatingActionButton infoButton;
+
     private Intent serviceIntent;
     private Subscription serviceCallbackSubscription;
 
     private MainActivity activity;
+
+    @Override
+    public void onAttach(Context context) {
+        super.onAttach(context);
+        activity = (MainActivity)context;
+    }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -63,31 +78,11 @@ public class GalleryFragment extends Fragment implements SwipeRefreshLayout.OnRe
     @Override
     public void onResume() {
         super.onResume();
-        activity = (MainActivity)getActivity();
-        activity.getDetailsButton().show();
+        infoButton.show();
         swipeLayout.setOnRefreshListener(this);
         GalleryAdapter galleryAdapter = new GalleryAdapter(getActivity());
         pager.setAdapter(galleryAdapter);
-        pager.addOnPageChangeListener(new ViewPager.OnPageChangeListener() {
-            @Override
-            public void onPageScrolled(int position, float positionOffset, int positionOffsetPixels) {
-            }
-
-            @Override
-            public void onPageSelected(int position) {
-                swipeLayout.setEnabled(position == 0);
-                BitmapStore.INSTANCE.pointer = position;
-            }
-
-            @Override
-            public void onPageScrollStateChanged(int state) {
-                if (state == ViewPager.SCROLL_STATE_DRAGGING) {
-                    activity.getDetailsButton().hide();
-                } else if (state == ViewPager.SCROLL_STATE_IDLE) {
-                    activity.getDetailsButton().show();
-                }
-            }
-        });
+        pager.setOnPageChangeListener(new GalleryPagerListener(activity, swipeLayout, infoButton));
     }
 
     @Override
@@ -110,10 +105,22 @@ public class GalleryFragment extends Fragment implements SwipeRefreshLayout.OnRe
         fetchUpdate();
     }
 
+    @SuppressWarnings("unused")
+    @OnClick({R.id.info_button})
+    public void onDetailButtonClick(View view){
+        if (BitmapMemory.INSTANCE.pointer != -1) {
+            activity.setFragment(MainActivity.FRAGMENT_DETAIL, true);
+        }
+    }
+
     private void fetchUpdate() {
-        activity.getDetailsButton().setOnClickListener(null);
-        BitmapStore.INSTANCE.reset();
+        BitmapMemory.INSTANCE.reset();
+        InfoMemory.INSTANCE.reset();
         subscribeToBus();
+        triggerServiceIntent();
+    }
+
+    private void triggerServiceIntent() {
         if (serviceIntent == null) {
             serviceIntent = new Intent(getActivity(), FlickrLoaderService.class);
         }
@@ -125,49 +132,53 @@ public class GalleryFragment extends Fragment implements SwipeRefreshLayout.OnRe
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
                 .buffer(Config.NR_OF_IMAGES)
-                .subscribe(new Action1<List<String>>() {
+                .subscribe(new Action1<List<RawInfo>>() {
                     @Override
-                    public void call(List<String> urls) {
-                        if (urls != null) {
-                            Observable.from(urls)
+                    public void call(List<RawInfo> infos) {
+                        if (infos != null) {
+                            Observable.from(infos)
                                 .observeOn(Schedulers.io())
                                 .subscribeOn(AndroidSchedulers.mainThread())
-                                .map(new Func1<String, Bitmap>() {
+                                .map(new Func1<RawInfo, String>() {
                                     @Override
-                                    public Bitmap call(String url) {
-                                        Timber.i("adding url item: %s", url);
-                                        Bitmap bmp = null;
-                                        try {
-                                            bmp = Picasso.with(getActivity())
-                                                    .load(url)
-                                                    .get();
-                                        } catch (IOException e) {
-                                            e.printStackTrace();
-                                        }
-                                        return bmp;
+                                    public String call(RawInfo info) {
+                                        InfoMemory.INSTANCE.add(info);
+                                        return info.toFarmUrl();
                                     }
                                 })
-                                .subscribe(new Action1<Bitmap>() {
+                                .onErrorResumeNext(new Func1<Throwable, Observable<? extends String>>() {
                                     @Override
-                                    public void call(final Bitmap bitmap) {
-                                        getActivity().runOnUiThread(new Runnable() {
+                                    public Observable<? extends String> call(Throwable throwable) {
+                                        Timber.w(throwable, "error retrieving farm url");
+                                        return null;
+                                    }
+                                })
+                                .filter(new Func1<String, Boolean>() {
+                                    @Override
+                                    public Boolean call(String s) {
+                                        return s != null;
+                                    }
+                                })
+                                .map(new Func1<String, Bitmap>() {
+                                    @Override
+                                    public Bitmap call(final String url) {
+                                        return loadBitmapFromUrl(url);
+                                    }
+                                })
+                                .subscribe(
+                                        new Action1<Bitmap>() {
+                                               @Override
+                                               public void call(final Bitmap bitmap) {
+                                                   addBitmapToStore(bitmap);
+                                               }
+                                            },
+                                        new Action1<Throwable>() {
                                             @Override
-                                            public void run() {
-                                                BitmapStore.INSTANCE.add(bitmap);
-                                                BitmapStore.INSTANCE.pointer = 0;
+                                            public void call(Throwable throwable) {
+                                                Timber.w(throwable, "error receiving callback");
                                             }
-                                        });
-                                    }
-                                });
-                            activity.getDetailsButton().setOnClickListener(new View.OnClickListener() {
-                                @Override
-                                public void onClick(View v) {
-                                    final int bmpPos = BitmapStore.INSTANCE.pointer;
-                                    if (bmpPos != -1) {
-                                        activity.setFragment(MainActivity.FRAGMENT_DETAIL, true);
-                                    }
-                                }
-                            });
+                                        }
+                                );
                         }
                         else {
                             Toast.makeText(getActivity(),
@@ -179,6 +190,33 @@ public class GalleryFragment extends Fragment implements SwipeRefreshLayout.OnRe
                         unsubscribeFromBus();
                     }
                 });
+    }
+
+    @Nullable
+    private Bitmap loadBitmapFromUrl(String url) {
+        Timber.i("adding url item: %s", url);
+        BitmapMemory.INSTANCE.addUrl(url);
+        Bitmap bmp = null;
+        try {
+            bmp = Picasso.with(getActivity())
+                    .load(url)
+                    .get();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return bmp;
+    }
+
+    private void addBitmapToStore(final Bitmap bitmap) {
+        if (bitmap != null) {
+            getActivity().runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    BitmapMemory.INSTANCE.add(bitmap);
+                    BitmapMemory.INSTANCE.pointer = 0;
+                }
+            });
+        }
     }
 
     private void unsubscribeFromBus() {

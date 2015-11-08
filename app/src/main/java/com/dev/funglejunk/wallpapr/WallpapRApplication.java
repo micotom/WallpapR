@@ -3,6 +3,7 @@ package com.dev.funglejunk.wallpapr;
 import android.app.Application;
 import android.util.Log;
 
+import com.dev.funglejunk.wallpapr.storage.FavStore;
 import com.dev.funglejunk.wallpapr.storage.Store;
 
 import timber.log.Timber;
@@ -23,6 +24,7 @@ public class WallpapRApplication extends Application {
 
     private void initStore() {
         Store.INSTANCE.init(this);
+        FavStore.INSTANCE.init(this);
     }
 
     private void initTimber() {

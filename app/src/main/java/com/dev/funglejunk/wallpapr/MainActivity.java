@@ -3,27 +3,28 @@ package com.dev.funglejunk.wallpapr;
 import android.os.Bundle;
 import android.support.annotation.IntDef;
 import android.support.annotation.NonNull;
-import android.support.design.widget.FloatingActionButton;
 import android.support.v4.app.Fragment;
 import android.support.v4.app.FragmentActivity;
 import android.support.v4.app.FragmentManager;
 import android.view.View;
-import android.view.animation.AlphaAnimation;
-import android.view.animation.Animation;
-import android.view.animation.AnimationSet;
-import android.view.animation.RotateAnimation;
+import android.widget.ImageView;
+import android.widget.Toast;
 
 import com.dev.funglejunk.wallpapr.fragment.DetailFragment;
 import com.dev.funglejunk.wallpapr.fragment.GalleryFragment;
-import com.dev.funglejunk.wallpapr.util.BitmapStore;
+import com.dev.funglejunk.wallpapr.storage.FavEntry;
+import com.dev.funglejunk.wallpapr.storage.FavStore;
+import com.dev.funglejunk.wallpapr.util.BitmapMemory;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
 import butterknife.Bind;
 import butterknife.ButterKnife;
+import butterknife.OnClick;
 import icepick.Icepick;
 import icepick.State;
+import rx.functions.Action1;
 import timber.log.Timber;
 
 public class MainActivity extends FragmentActivity {
@@ -39,17 +40,11 @@ public class MainActivity extends FragmentActivity {
     @State
     @FragmentId int currentFragmentId = FRAGMENT_NULL;
 
-    @Bind(R.id.back_arrow)
-    View backArrow;
-
     @Bind(R.id.star)
-    View star;
+    ImageView star;
 
     @Bind(R.id.settings)
     View settings;
-
-    @Bind(R.id.details_button)
-    FloatingActionButton detailsButton;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -66,7 +61,7 @@ public class MainActivity extends FragmentActivity {
             currentFragmentId = FRAGMENT_GALLERY;
         }
         Timber.d("current fragment id: %d", currentFragmentId);
-        BitmapStore.INSTANCE.clearListeners();
+        BitmapMemory.INSTANCE.clearListeners();
         setFragment(currentFragmentId, true);
     }
 
@@ -82,69 +77,21 @@ public class MainActivity extends FragmentActivity {
         super.onDestroy();
     }
 
-    public FloatingActionButton getDetailsButton() {
-        return detailsButton;
+    @SuppressWarnings("unused")
+    @OnClick({R.id.star})
+    public void onStarClick(View view) {
+
     }
 
     public void setFragment(@FragmentId final int id, boolean forth) {
         FragmentManager manager = getSupportFragmentManager();
         Fragment fragment = getFragment(id, getTag(id), manager);
-        setViewAnimations(id);
-        setViewListeners(id);
         manager.beginTransaction()
             .replace(R.id.fragment_container, fragment)
             .setCustomAnimations(forth ? R.anim.slide_in_left : R.anim.slide_out_left,
                     forth ? R.anim.slide_out_left : R.anim.slide_in_left)
             .addToBackStack(getTag(id))
             .commit();
-    }
-
-    private void setViewAnimations(@FragmentId final int id) {
-        switch (id) {
-            case FRAGMENT_GALLERY:
-                AnimationSet animSet = new AnimationSet(true);
-                RotateAnimation rAnim = new RotateAnimation(0, 90, Animation.RELATIVE_TO_SELF,
-                        0.5f,  Animation.RELATIVE_TO_SELF, 0.5f);
-                rAnim.setDuration(1000);
-                AlphaAnimation aAnim = new AlphaAnimation(1.0f, 0.0f);
-                aAnim.setDuration(1500);
-                animSet.addAnimation(rAnim);
-                animSet.addAnimation(aAnim);
-                animSet.setFillAfter(true);
-                backArrow.startAnimation(animSet);
-                break;
-            case FRAGMENT_DETAIL:
-                backArrow.setRotation(-45);
-                animSet = new AnimationSet(true);
-                aAnim = new AlphaAnimation(0.0f, 1.0f);
-                aAnim.setDuration(1500);
-                animSet.addAnimation(aAnim);
-                animSet.setFillAfter(true);
-                backArrow.startAnimation(animSet);
-                break;
-            case FRAGMENT_SETTINGS:
-            default:
-                throw new UnsupportedOperationException("Fragment not implemented: " + id);
-        }
-    }
-
-    private void setViewListeners(@FragmentId final int id) {
-        switch (id) {
-            case FRAGMENT_GALLERY:
-                backArrow.setOnClickListener(null);
-                break;
-            case FRAGMENT_DETAIL:
-                backArrow.setOnClickListener(new View.OnClickListener() {
-                    @Override
-                    public void onClick(View v) {
-                        setFragment(FRAGMENT_GALLERY, false);
-                    }
-                });
-                break;
-            case FRAGMENT_SETTINGS:
-            default:
-                throw new UnsupportedOperationException("Fragment not implemented: " + id);
-        }
     }
 
     private String getTag(@FragmentId int fragmentId) {
@@ -180,6 +127,46 @@ public class MainActivity extends FragmentActivity {
             }
         }
         return fragment;
+    }
+
+    public void updateStar() {
+        final String url = BitmapMemory.INSTANCE.getUrl(BitmapMemory.INSTANCE.pointer);
+        final FavEntry favEntry = new FavEntry(url);
+        FavStore.INSTANCE.has(favEntry).subscribe(new Action1<Boolean>() {
+            @Override
+            public void call(Boolean has) {
+                if (has) {
+                    star.setOnClickListener(null);
+                    star.setImageDrawable(getResources().getDrawable(R.drawable.ic_action_star_10));
+                }
+                else {
+                    star.setImageDrawable(getResources().getDrawable(R.drawable.ic_action_star_0));
+                    star.setOnClickListener(new View.OnClickListener() {
+                        @Override
+                        public void onClick(View v) {
+                            Timber.i("click!");
+                            final int bmpPos = BitmapMemory.INSTANCE.pointer;
+                            if (bmpPos != -1) {
+                                star.setImageDrawable(getResources().getDrawable(R.drawable.ic_action_star_10));
+                                final String url = BitmapMemory.INSTANCE.getUrl(BitmapMemory.INSTANCE.pointer);
+                                final FavEntry favEntry = new FavEntry(url);
+                                FavStore.INSTANCE.has(favEntry).subscribe(new Action1<Boolean>() {
+                                    @Override
+                                    public void call(Boolean has) {
+                                        if (!has) {
+                                            FavStore.INSTANCE.persist(favEntry);
+                                            Toast.makeText(MainActivity.this, "SAVED TO FAVS!", Toast.LENGTH_LONG).show();
+                                        } else {
+                                            Toast.makeText(MainActivity.this, "ALREADY FAV ;)", Toast.LENGTH_LONG).show();
+                                        }
+                                    }
+                                });
+                            }
+                        }
+                    });
+                }
+            }
+        });
     }
 
 }

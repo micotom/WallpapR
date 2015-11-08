@@ -4,12 +4,10 @@ import android.app.IntentService;
 import android.content.Intent;
 
 import com.dev.funglejunk.wallpapr.Config;
-import com.dev.funglejunk.wallpapr.rx.RxServiceCallback;
 import com.dev.funglejunk.wallpapr.model.info.RawInfo;
 import com.dev.funglejunk.wallpapr.model.search.CompressedSearch;
 import com.dev.funglejunk.wallpapr.model.search.RawSearch;
-import com.dev.funglejunk.wallpapr.storage.Entry;
-import com.dev.funglejunk.wallpapr.storage.Store;
+import com.dev.funglejunk.wallpapr.rx.RxServiceCallback;
 import com.dev.funglejunk.wallpapr.util.Network;
 
 import retrofit.GsonConverterFactory;
@@ -75,10 +73,11 @@ public class FlickrLoaderService extends IntentService {
             return;
         }
 
-        createSearchObservable("abstract", Config.NR_OF_IMAGES)
+        createSearchObservable(Config.KEYWORD, Config.NR_OF_IMAGES)
                 .onErrorResumeNext(new Func1<Throwable, Observable<? extends RawSearch>>() {
                     @Override
                     public Observable<? extends RawSearch> call(Throwable throwable) {
+                        Timber.w(throwable, "search observable null callback");
                         return null;
                     }
                 })
@@ -94,49 +93,45 @@ public class FlickrLoaderService extends IntentService {
                         return CompressedSearch.fromRawSearch(photo);
                     }
                 })
-                .filter(new Func1<CompressedSearch, Boolean>() {
-                    @Override
-                    public Boolean call(CompressedSearch compressedSearch) {
-                        CompressedSearch lastEntry = Store.INSTANCE.getLastEntryResult();
-                        return lastEntry != null && !(lastEntry.imageId.equals(compressedSearch.imageId));
-                    }
-                })
                 .map(new Func1<CompressedSearch, Observable<RawInfo>>() {
                     @Override
                     public Observable<RawInfo> call(CompressedSearch compressedSearch) {
-                        Store.INSTANCE.persist(new Entry(System.currentTimeMillis(),
-                                compressedSearch));
                         return createInfoObservable(compressedSearch.imageId, compressedSearch.secret);
                     }
                 })
                 .subscribeOn(Schedulers.io())
                 .subscribe(new Action1<Observable<RawInfo>>() {
-                               @Override
-                               public void call(Observable<RawInfo> rawInfo) {
-                                   if (rawInfo != null) {
-                                       rawInfo.subscribe
-                                               (new Action1<RawInfo>() {
-                                                    @Override
-                                                    public void call(RawInfo rawInfo) {
-                                                        RxServiceCallback.report(rawInfo.toFarmUrl());
-                                                    }
-                                                },
-                                               new Action1<Throwable>() {
-                                                   @Override
-                                                   public void call(Throwable throwable) {
-                                                       Timber.w("error task", throwable);
-                                                       RxServiceCallback.report(null);
-                                                   }
-                                               });
-                                   }
-                               }
-                           },
-                        new Action1<Throwable>() {
-                            @Override
-                            public void call(Throwable throwable) {
-                                Timber.e(throwable, "error loading image");
-                            }
-                        });
+                    @Override
+                    public void call(Observable<RawInfo> rawInfo) {
+                        if (rawInfo != null) {
+                            rawInfo.subscribe(
+                                new Action1<RawInfo>() {
+                                    @Override
+                                    public void call(RawInfo rawInfo) {
+                                        Timber.i("trigger callback");
+                                        RxServiceCallback.report(rawInfo);
+                                    }
+                                },
+                                new Action1<Throwable>() {
+                                    @Override
+                                    public void call(Throwable throwable) {
+                                        Timber.w("error task", throwable);
+                                        RxServiceCallback.report(null);
+                                    }
+                           });
+                        }
+                        else {
+                            Timber.w("got nullified raw info");
+                            RxServiceCallback.report(null);
+                        }
+                    }
+                },
+                new Action1<Throwable>() {
+                    @Override
+                    public void call(Throwable throwable) {
+                        Timber.e(throwable, "error loading image");
+                    }
+                });
 
     }
 
