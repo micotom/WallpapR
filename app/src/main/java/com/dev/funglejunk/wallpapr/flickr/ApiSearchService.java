@@ -15,8 +15,8 @@ public interface ApiSearchService {
                                  @Query("per_page") int count,
                                  @Query("license") String license,
                                  @Query("content_type") int contentType,
-                                @Query("media") String media,
-                                @Query("format") String format,
+                                 @Query("media") String media,
+                                 @Query("format") String format,
                                  @Query("nojsoncallback") int noJsonCallback);
 
 }

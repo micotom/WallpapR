@@ -14,6 +14,7 @@ import retrofit.GsonConverterFactory;
 import retrofit.Retrofit;
 import retrofit.RxJavaCallAdapterFactory;
 import rx.Observable;
+import rx.exceptions.OnErrorThrowable;
 import rx.functions.Action1;
 import rx.functions.Func1;
 import rx.schedulers.Schedulers;
@@ -25,10 +26,18 @@ public class FlickrLoaderService extends IntentService {
     private static final ApiInfoService apiInfoService;
 
     static {
+        /*
+        OkHttpClient client = new OkHttpClient();
+        HttpLoggingInterceptor interceptor = new HttpLoggingInterceptor();
+        interceptor.setLevel(HttpLoggingInterceptor.Level.BODY);
+        client.interceptors().add(interceptor);
+        */
+
         Retrofit retrofit = new Retrofit.Builder()
                 .baseUrl(FlickrApi.API_BASE)
                 .addCallAdapterFactory(RxJavaCallAdapterFactory.create())
                 .addConverterFactory(GsonConverterFactory.create())
+                // .client(client)
                 .build();
         apiSearchService = retrofit.create(ApiSearchService.class);
         apiInfoService = retrofit.create(ApiInfoService.class);
@@ -65,7 +74,7 @@ public class FlickrLoaderService extends IntentService {
 
     @Override
     protected void onHandleIntent(Intent intent) {
-        Timber.d("api request");
+        Timber.d("received intent");
 
         if (!Network.isConnected(this)) {
             Timber.w("no network - skip query");
@@ -73,18 +82,26 @@ public class FlickrLoaderService extends IntentService {
             return;
         }
 
+        Timber.d("start request");
+
+        final String action = intent.getAction();
+        if (Config.INTENT_NEW_REQUEST.equals(action)) {
+            queryNewRequest();
+        }
+        else {
+            throw new IllegalArgumentException("Unknown intent action: " + action);
+        }
+    }
+
+    private void queryNewRequest() {
         createSearchObservable(Config.KEYWORD, Config.NR_OF_IMAGES)
-                .onErrorResumeNext(new Func1<Throwable, Observable<? extends RawSearch>>() {
-                    @Override
-                    public Observable<? extends RawSearch> call(Throwable throwable) {
-                        Timber.w(throwable, "search observable null callback");
-                        return null;
-                    }
-                })
                 .concatMap(new Func1<RawSearch, Observable<RawSearch.Photos.Photo>>() {
                     @Override
                     public Observable<RawSearch.Photos.Photo> call(RawSearch rawSearch) {
-                        return Observable.from(rawSearch.photos.photo);
+                        if (rawSearch.photos.photo.size() > 0) {
+                            return Observable.from(rawSearch.photos.photo);
+                        }
+                        throw OnErrorThrowable.from(new Exception("FlickR down"));
                     }
                 })
                 .map(new Func1<RawSearch.Photos.Photo, CompressedSearch>() {
@@ -101,38 +118,36 @@ public class FlickrLoaderService extends IntentService {
                 })
                 .subscribeOn(Schedulers.io())
                 .subscribe(new Action1<Observable<RawInfo>>() {
-                    @Override
-                    public void call(Observable<RawInfo> rawInfo) {
-                        if (rawInfo != null) {
-                            rawInfo.subscribe(
-                                new Action1<RawInfo>() {
-                                    @Override
-                                    public void call(RawInfo rawInfo) {
-                                        Timber.i("trigger callback");
-                                        RxServiceCallback.report(rawInfo);
-                                    }
-                                },
-                                new Action1<Throwable>() {
-                                    @Override
-                                    public void call(Throwable throwable) {
-                                        Timber.w("error task", throwable);
-                                        RxServiceCallback.report(null);
-                                    }
-                           });
-                        }
-                        else {
-                            Timber.w("got nullified raw info");
-                            RxServiceCallback.report(null);
-                        }
-                    }
-                },
-                new Action1<Throwable>() {
-                    @Override
-                    public void call(Throwable throwable) {
-                        Timber.e(throwable, "error loading image");
-                    }
-                });
-
+                               @Override
+                               public void call(Observable<RawInfo> rawInfo) {
+                               if (rawInfo != null) {
+                                   rawInfo.subscribe(
+                                           new Action1<RawInfo>() {
+                                               @Override
+                                               public void call(RawInfo rawInfo) {
+                                               RxServiceCallback.report(rawInfo);
+                                               }
+                                           },
+                                           new Action1<Throwable>() {
+                                               @Override
+                                               public void call(Throwable throwable) {
+                                                   Timber.w("error task", throwable);
+                                                   RxServiceCallback.report(null);
+                                               }
+                                           });
+                               } else {
+                                   Timber.w("got nullified raw info");
+                                   RxServiceCallback.report(null);
+                               }
+                               }
+                           },
+                        new Action1<Throwable>() {
+                            @Override
+                            public void call(Throwable throwable) {
+                                Timber.w(throwable, "error loading image");
+                                RxServiceCallback.report(null);
+                            }
+                        });
     }
 
 }

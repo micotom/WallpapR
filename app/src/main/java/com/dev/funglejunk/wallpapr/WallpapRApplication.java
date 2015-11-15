@@ -4,7 +4,8 @@ import android.app.Application;
 import android.util.Log;
 
 import com.dev.funglejunk.wallpapr.storage.FavStore;
-import com.dev.funglejunk.wallpapr.storage.Store;
+import com.dev.funglejunk.wallpapr.util.memory.FavouritesMemory;
+import com.dev.funglejunk.wallpapr.util.memory.GalleryMemory;
 
 import timber.log.Timber;
 
@@ -15,15 +16,12 @@ public class WallpapRApplication extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
-
-        PACKAGE_NAME = getApplicationContext().getPackageName();
-
-        initStore();
         initTimber();
-    }
 
-    private void initStore() {
-        Store.INSTANCE.init(this);
+        PACKAGE_NAME = this.getPackageName();
+
+        GalleryMemory.INSTANCE.init(this);
+        FavouritesMemory.INSTANCE.init(this);
         FavStore.INSTANCE.init(this);
     }
 

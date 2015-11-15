@@ -8,13 +8,12 @@ import android.support.v4.app.FragmentActivity;
 import android.support.v4.app.FragmentManager;
 import android.view.View;
 import android.widget.ImageView;
-import android.widget.Toast;
 
 import com.dev.funglejunk.wallpapr.fragment.DetailFragment;
+import com.dev.funglejunk.wallpapr.fragment.FavouritesFragment;
 import com.dev.funglejunk.wallpapr.fragment.GalleryFragment;
 import com.dev.funglejunk.wallpapr.storage.FavEntry;
 import com.dev.funglejunk.wallpapr.storage.FavStore;
-import com.dev.funglejunk.wallpapr.util.BitmapMemory;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -29,22 +28,20 @@ import timber.log.Timber;
 
 public class MainActivity extends FragmentActivity {
 
-    @IntDef({FRAGMENT_NULL, FRAGMENT_GALLERY, FRAGMENT_DETAIL, FRAGMENT_SETTINGS})
+    @IntDef({FRAGMENT_NULL, FRAGMENT_GALLERY, FRAGMENT_DETAIL, FRAGMENT_SETTINGS, FRAGMENT_FAVOURITES})
     @Retention(RetentionPolicy.SOURCE)
     public @interface FragmentId{}
     public final static int FRAGMENT_NULL = -1;
     public final static int FRAGMENT_GALLERY = 0;
     public final static int FRAGMENT_DETAIL = 1;
     public final static int FRAGMENT_SETTINGS = 2;
+    public final static int FRAGMENT_FAVOURITES = 3;
 
     @State
     @FragmentId int currentFragmentId = FRAGMENT_NULL;
 
     @Bind(R.id.star)
     ImageView star;
-
-    @Bind(R.id.settings)
-    View settings;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -61,7 +58,6 @@ public class MainActivity extends FragmentActivity {
             currentFragmentId = FRAGMENT_GALLERY;
         }
         Timber.d("current fragment id: %d", currentFragmentId);
-        BitmapMemory.INSTANCE.clearListeners();
         setFragment(currentFragmentId, true);
     }
 
@@ -78,19 +74,20 @@ public class MainActivity extends FragmentActivity {
     }
 
     @SuppressWarnings("unused")
-    @OnClick({R.id.star})
-    public void onStarClick(View view) {
-
+    @OnClick({R.id.settings})
+    public void onSettingsClicked() {
+        setFragment(FRAGMENT_FAVOURITES, true);
     }
 
     public void setFragment(@FragmentId final int id, boolean forth) {
         FragmentManager manager = getSupportFragmentManager();
-        Fragment fragment = getFragment(id, getTag(id), manager);
+        final String tag = getTag(id);
+        Fragment fragment = getFragment(id, tag, manager);
         manager.beginTransaction()
             .replace(R.id.fragment_container, fragment)
             .setCustomAnimations(forth ? R.anim.slide_in_left : R.anim.slide_out_left,
                     forth ? R.anim.slide_out_left : R.anim.slide_in_left)
-            .addToBackStack(getTag(id))
+            .addToBackStack(tag)
             .commit();
     }
 
@@ -102,6 +99,9 @@ public class MainActivity extends FragmentActivity {
                 break;
             case FRAGMENT_DETAIL:
                 tag = DetailFragment.class.getName();
+                break;
+            case FRAGMENT_FAVOURITES:
+                tag = FavouritesFragment.class.getName();
                 break;
             case FRAGMENT_SETTINGS:
             default:
@@ -121,6 +121,9 @@ public class MainActivity extends FragmentActivity {
                 case FRAGMENT_DETAIL:
                     fragment = new DetailFragment();
                     break;
+                case FRAGMENT_FAVOURITES:
+                    fragment = new FavouritesFragment();
+                    break;
                 case FRAGMENT_SETTINGS:
                 default:
                     throw new UnsupportedOperationException("Fragment not implemented: " + fragmentId);
@@ -129,44 +132,48 @@ public class MainActivity extends FragmentActivity {
         return fragment;
     }
 
-    public void updateStar() {
-        final String url = BitmapMemory.INSTANCE.getUrl(BitmapMemory.INSTANCE.pointer);
-        final FavEntry favEntry = new FavEntry(url);
+    public void updateStar(final String currentUrl) {
+        final FavEntry favEntry = new FavEntry(currentUrl);
         FavStore.INSTANCE.has(favEntry).subscribe(new Action1<Boolean>() {
             @Override
             public void call(Boolean has) {
                 if (has) {
-                    star.setOnClickListener(null);
-                    star.setImageDrawable(getResources().getDrawable(R.drawable.ic_action_star_10));
-                }
-                else {
-                    star.setImageDrawable(getResources().getDrawable(R.drawable.ic_action_star_0));
-                    star.setOnClickListener(new View.OnClickListener() {
-                        @Override
-                        public void onClick(View v) {
-                            Timber.i("click!");
-                            final int bmpPos = BitmapMemory.INSTANCE.pointer;
-                            if (bmpPos != -1) {
-                                star.setImageDrawable(getResources().getDrawable(R.drawable.ic_action_star_10));
-                                final String url = BitmapMemory.INSTANCE.getUrl(BitmapMemory.INSTANCE.pointer);
-                                final FavEntry favEntry = new FavEntry(url);
-                                FavStore.INSTANCE.has(favEntry).subscribe(new Action1<Boolean>() {
-                                    @Override
-                                    public void call(Boolean has) {
-                                        if (!has) {
-                                            FavStore.INSTANCE.persist(favEntry);
-                                            Toast.makeText(MainActivity.this, "SAVED TO FAVS!", Toast.LENGTH_LONG).show();
-                                        } else {
-                                            Toast.makeText(MainActivity.this, "ALREADY FAV ;)", Toast.LENGTH_LONG).show();
-                                        }
-                                    }
-                                });
-                            }
-                        }
-                    });
+                    onFavouriteImagePaged();
+                } else {
+                    onNonFavouriteImagePaged(currentUrl);
                 }
             }
         });
+    }
+
+    private void onNonFavouriteImagePaged(final String currentUrl) {
+        star.setImageDrawable(getResources().getDrawable(R.drawable.ic_action_star_0));
+        star.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                final FavEntry favEntry = new FavEntry(currentUrl);
+                FavStore.INSTANCE.has(favEntry).subscribe(new Action1<Boolean>() {
+                    @Override
+                    public void call(Boolean has) {
+                        if (has) {return;}
+                        FavStore.INSTANCE.persist(favEntry).subscribe(new Action1<Boolean>() {
+                            @Override
+                            public void call(Boolean success) {
+                                if (success) {
+                                    star.setImageDrawable(getResources()
+                                            .getDrawable(R.drawable.ic_action_star_10));
+                                }
+                            }
+                        });
+                    }
+                });
+            }
+        });
+    }
+
+    private void onFavouriteImagePaged() {
+        star.setOnClickListener(null);
+        star.setImageDrawable(getResources().getDrawable(R.drawable.ic_action_star_10));
     }
 
 }

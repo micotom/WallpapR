@@ -8,7 +8,6 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 
 import com.dev.funglejunk.wallpapr.R;
-import com.dev.funglejunk.wallpapr.util.BitmapMemory;
 
 import butterknife.Bind;
 import butterknife.ButterKnife;
@@ -29,8 +28,10 @@ public class DetailFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
+        /*
         imageView.setImageBitmap(BitmapMemory.INSTANCE.getContent()
                 .get(BitmapMemory.INSTANCE.pointer));
+                */
     }
 
     @Override
