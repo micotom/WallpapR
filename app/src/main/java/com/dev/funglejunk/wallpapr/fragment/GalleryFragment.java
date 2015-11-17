@@ -74,18 +74,26 @@ public class GalleryFragment extends Fragment implements SwipeRefreshLayout.OnRe
     }
 
     @Override
-    public void onResume() {
-        super.onResume();
+    public void onStart() {
+        super.onStart();
         infoButton.show();
 
         infoButton.startAnimation(Anims.getLeftToRight());
 
         swipeLayout.setOnRefreshListener(this);
 
-        pagerAdapter = new GalleryPagerAdapter(getActivity());
-        pager.setAdapter(pagerAdapter);
+        if (pager.getAdapter() == null) {
+            pagerAdapter = new GalleryPagerAdapter(getActivity());
+            pager.setAdapter(pagerAdapter);
+        }
 
         pager.setOnPageChangeListener(this);
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+
     }
 
     @Override

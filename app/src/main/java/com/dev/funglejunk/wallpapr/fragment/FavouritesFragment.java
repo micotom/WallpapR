@@ -52,28 +52,33 @@ public class FavouritesFragment extends Fragment implements ViewPager.OnPageChan
     }
 
     @Override
-    public void onResume() {
-        super.onResume();
-
+    public void onStart() {
+        super.onStart();
         wallpaperButton.startAnimation(Anims.getRightToLeft());
 
-        favouritesAdapter = new FavouritesPagerAdapter(getActivity());
-        pager.setAdapter(favouritesAdapter);
+        if (pager.getAdapter() == null) {
+            favouritesAdapter = new FavouritesPagerAdapter(getActivity());
+            pager.setAdapter(favouritesAdapter);
+        }
         pager.setOnPageChangeListener(this);
+    }
 
+    @Override
+    public void onResume() {
+        super.onResume();
         FavStore.INSTANCE.getAll()
-            .delay(1, TimeUnit.SECONDS)
-            .subscribe(new Action1<FavEntry>() {
-                @Override
-                public void call(final FavEntry entry) {
-                    getActivity().runOnUiThread(new Runnable() {
-                        @Override
-                        public void run() {
-                            favouritesAdapter.add(entry);
-                        }
-                    });
-                }
-            });
+                .delay(1, TimeUnit.SECONDS)
+                .subscribe(new Action1<FavEntry>() {
+                    @Override
+                    public void call(final FavEntry entry) {
+                        getActivity().runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                favouritesAdapter.add(entry);
+                            }
+                        });
+                    }
+                });
     }
 
     @SuppressWarnings("unused")
